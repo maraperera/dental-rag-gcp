@@ -1,8 +1,14 @@
 # GCP BigQuery & Storage
 google-cloud-bigquery>=3.25.0
 google-cloud-storage>=2.18.0
+google-cloud-aiplatform>=1.60.0
 db-dtypes>=1.3.0
 pyarrow>=17.0.0
+pandas-gbq>=0.26.1
+
+# Generative AI & Embeddings
+google-genai>=0.1.1
+langchain-google-vertexai>=1.0.8
 
 # Data manipulation and synthetic generation
 pandas>=2.2.0
@@ -12,3 +18,6 @@ numpy>=1.26.0
 # Environment and configuration
 python-dotenv>=1.0.1
 pydantic-settings>=2.4.0
+
+# Optional Interactive UI
+streamlit>=1.38.0
