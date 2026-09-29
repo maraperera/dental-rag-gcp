@@ -2,20 +2,21 @@
 
 A scalable synthetic data pipeline, operational data warehouse, and Retrieval-Augmented Generation (RAG) assistant designed for **dental practice management and analytics**.
 
-This platform provisions a relational data warehouse in **Google Cloud Platform (GCP) BigQuery**, loads **1.8M+ synthetic clinical, diagnostic, appointment, and billing records**, and provides a domain-restricted natural-language analytics assistant powered by **Gemini**.
+This platform provisions a relational data warehouse in **Google Cloud Platform (GCP) BigQuery**, loads **1.8M+ synthetic clinical, diagnostic, appointment, and billing records**, and provides a domain-restricted natural-language analytics assistant powered by **Gemini**, with real-time observability and distributed tracing powered by **LangSmith**.
 
 The system combines:
 
 * BigQuery relational analytics
 * Gemini-powered Text-to-SQL
-* Domain intent classification
-* SQL validation and repair
+* LangSmith observability and distributed tracing
+* Domain intent classification and guardrails
+* SQL validation and automated self-healing loops
 * Clinical semantic retrieval
 * RAG-based response synthesis
 * Synthetic healthcare data generation
 * GCP service-account authentication
 
-> **Important:** All patient and clinical data used by this project is synthetic and generated for development, testing, demonstration, and RAG evaluation purposes.
+> **Important:** All patient and clinical data used by this project is synthetic and generated exclusively for development, testing, demonstration, and RAG evaluation purposes.
 
 ---
 
@@ -24,13 +25,23 @@ The system combines:
 ```text
                          ┌─────────────────────────┐
                          │       User / CLI        │
-                         │      app.py             │
+                         │        app.py           │
                          └────────────┬────────────┘
                                       │
                                       ▼
                          ┌─────────────────────────┐
-                         │    RAG Pipeline         │
-                         │    pipeline.py          │
+                         │     RAG Pipeline        │
+                         │     pipeline.py         │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+                         ┌────────────▼────────────┐
+                         │    LangSmith Tracing    │
+                         │                         │
+                         │  • Spans & Latency      │
+                         │  • Token Usage & Cost   │
+                         │  • Inputs / Outputs     │
+                         │  • Error Tracking       │
                          └────────────┬────────────┘
                                       │
                                       ▼
@@ -43,7 +54,7 @@ The system combines:
                          │                         │
                          ▼                         ▼
                  ┌─────────────────┐      ┌──────────────────┐
-                 │   SQL Route     │      │ Clinical Vector  │
+                 │    SQL Route    │      │ Clinical Vector  │
                  │                 │      │ Search Route     │
                  └────────┬────────┘      └────────┬─────────┘
                           │                        │
@@ -71,12 +82,12 @@ The system combines:
                                     ▼
                          ┌─────────────────────────┐
                          │ Response Synthesis      │
-                         │ Gemini                  │
+                         │        Gemini           │
                          └────────────┬────────────┘
                                       │
                                       ▼
                          ┌─────────────────────────┐
-                         │     Final Answer        │
+                         │      Final Answer       │
                          └─────────────────────────┘
 ```
 
@@ -86,7 +97,7 @@ The system combines:
 
 ## 1. Relational BigQuery Data Warehouse
 
-The system uses a structured **11-table relational schema** designed for dental clinic operations.
+The system uses a structured **11-table relational schema** designed around dental clinic operations.
 
 The warehouse contains synthetic data covering:
 
@@ -104,13 +115,116 @@ The warehouse contains synthetic data covering:
 
 The generated dataset contains **1.8M+ records** distributed across these tables.
 
+BigQuery is used as the central analytical data warehouse, supporting:
+
+* Large-scale SQL analytics
+* Multi-table joins
+* Aggregations
+* Filtering
+* Date-based analysis
+* Financial analysis
+* Operational reporting
+* Clinical data retrieval
+
 ---
 
-## 2. Intent-Driven RAG Routing
+# 🔎 2. Real-Time Observability & Monitoring with LangSmith
 
-The system analyzes each user question before deciding how to retrieve information.
+The application integrates **LangSmith** for end-to-end execution tracing and observability.
 
-Queries are routed into appropriate retrieval paths:
+Every RAG request can be monitored through a hierarchical trace structure.
+
+### Trace Hierarchy
+
+A typical request follows this structure:
+
+```text
+dental_rag_pipeline
+│
+├── guardrail_check
+│
+├── intent_router
+│
+├── generate_and_execute_sql
+│   │
+│   ├── sql_generation
+│   ├── bigquery_execution
+│   └── sql_repair
+│
+└── response_synthesis
+```
+
+LangSmith provides visibility into:
+
+### Trace Hierarchies
+
+Every query is recorded under a parent `dental_rag_pipeline` run with child execution spans such as:
+
+* `guardrail_check`
+* `intent_router`
+* `generate_and_execute_sql`
+* SQL generation
+* BigQuery execution
+* SQL repair/retry
+* Response synthesis
+
+### Latency Monitoring
+
+The system can measure the execution time of individual pipeline stages.
+
+For example:
+
+```text
+User Query
+    │
+    ├── Guardrail Check       → ~1.3s
+    │
+    ├── Intent Classification
+    │
+    ├── SQL Generation
+    │
+    ├── BigQuery Execution
+    │
+    └── Response Synthesis   → ~6–12s total
+```
+
+Actual latency depends on model response time, BigQuery execution time, network conditions, query complexity, and retry behaviour.
+
+### Token & Cost Monitoring
+
+LangSmith can be used to monitor:
+
+* Input token usage
+* Output token usage
+* Total token usage
+* Model calls
+* Execution latency
+* API-related costs where supported by the configured model/provider
+
+This makes it easier to identify expensive prompts, unnecessary model calls, and inefficient pipeline stages.
+
+### Debugging
+
+Each trace can be inspected to understand:
+
+* User input
+* Intent classification
+* Generated SQL
+* SQL validation results
+* BigQuery execution results
+* SQL repair attempts
+* Model responses
+* Final response synthesis
+
+This significantly simplifies debugging of Text-to-SQL and RAG workflows.
+
+---
+
+# 🧭 3. Intent-Driven RAG Routing
+
+The system analyzes each user question before deciding how information should be retrieved.
+
+Queries are routed into one of three retrieval paths:
 
 ```text
 User Question
@@ -129,9 +243,11 @@ Intent Classification
             └──► Clinical Vector Search
 ```
 
-### SQL queries
+---
 
-Used for questions involving:
+## SQL Queries
+
+SQL routing is intended for structured analytical and operational questions involving:
 
 * Counts
 * Sums
@@ -140,53 +256,80 @@ Used for questions involving:
 * Appointment volumes
 * Treatment frequency
 * Patient statistics
-* Operational metrics
+* Dentist performance metrics
+* Invoice information
+* Payment information
+* Date-based analysis
 
-Example:
+### Example
 
-> How many appointments were completed last month?
+> **"What is the total revenue generated by each dentist, and how many unique appointments did they complete?"**
 
-### Vector queries
+The system can translate this question into GoogleSQL, execute it against BigQuery, and use the results to construct a natural-language response.
 
-Used for semantic clinical questions involving:
+---
+
+## Vector Queries
+
+Vector routing is intended for semantic clinical questions involving information such as:
 
 * Clinical notes
 * Dental observations
 * Symptoms
 * Treatment descriptions
 * Medical history
-* Free-text clinical information
+* Free-text patient records
 
-Example:
+### Example
 
-> Find patients whose clinical notes mention sensitivity after a filling.
+> **"Find patients whose clinical notes mention sensitivity after a filling."**
 
-### Hybrid queries
-
-Used when both structured and semantic information is required.
-
-Example:
-
-> How many patients who received root canal treatment had clinical notes mentioning post-treatment sensitivity?
+The semantic retrieval layer can identify relevant clinical records based on meaning rather than requiring an exact keyword match.
 
 ---
 
-# 🛡️ Domain Guardrails
+## Hybrid Queries
 
-The application includes a domain guardrail that runs before downstream SQL generation or retrieval.
+Hybrid routing is intended for questions that require both:
 
-The purpose is to prevent unrelated questions from reaching the database or model pipeline.
+1. Structured relational information
+2. Semantic clinical information
 
-### Allowed topics
+For example:
 
-The assistant is designed for questions related to:
+> **"Find patients with sensitivity after fillings and show the number of follow-up appointments they attended."**
 
-* Dental patients
+The system can combine:
+
+```text
+Clinical Semantic Search
+          +
+BigQuery SQL
+          │
+          ▼
+Combined Context
+          │
+          ▼
+Gemini Response Synthesis
+```
+
+---
+
+# 🛡️ 4. Domain Guardrails
+
+The application includes a domain guardrail that executes before downstream SQL generation or semantic retrieval.
+
+The guardrail helps ensure that the application remains focused on the dental-clinic domain.
+
+## Allowed Queries
+
+Queries related to areas such as:
+
+* Patients
 * Dentists
-* Dental staff
 * Appointments
 * Treatments
-* Dental records
+* Clinical records
 * Medical history
 * Prescriptions
 * Invoices
@@ -194,470 +337,233 @@ The assistant is designed for questions related to:
 * Clinic operations
 * Dental analytics
 
-### Example allowed question
+are passed to the appropriate downstream pipeline.
 
-```text
-How many root canal treatments were performed this year?
-```
+## Blocked Queries
 
-### Example blocked question
+Unrelated questions can be rejected before database execution or additional model processing.
 
-```text
-How many moons does Jupiter have?
-```
+For example:
 
-The second question should be rejected before database execution.
+> **"How many moons does Jupiter have, and which one is the largest?"**
+
+The application can return a standardized domain disclaimer instead of executing an unnecessary database query.
+
+This reduces:
+
+* Unnecessary BigQuery execution
+* Model token consumption
+* Irrelevant SQL generation
+* Unnecessary downstream processing
 
 ---
 
-# 🧠 Text-to-SQL Pipeline
+# 🧠 5. Text-to-SQL Pipeline & Self-Healing
 
 The SQL agent converts natural-language questions into BigQuery-compatible GoogleSQL.
-
-The workflow is:
 
 ```text
 Natural Language Question
           │
           ▼
-Schema Context
+Schema Context + Prompt Constraints
           │
           ▼
 Gemini SQL Generation
           │
           ▼
-SQL Extraction
-          │
-          ▼
-SQL Safety Validation
-          │
-          ▼
-BigQuery Dry Run / Validation
+BigQuery Execution
           │
        ┌──┴──┐
        │     │
-     Valid  Invalid
+    Success Error
+       │     │
+       │     ▼
+       │   SQL Error Analysis
        │     │
        │     ▼
        │   Gemini SQL Repair
        │     │
        │     ▼
-       │   Re-validation
+       │   Re-execution
        │
        ▼
-BigQuery Execution
+Results & Context
 ```
+
+## SQL Generation
+
+The SQL agent receives relevant schema information and prompt constraints before generating GoogleSQL.
+
+The prompt can include:
+
+* Table names
+* Column names
+* Relationships
+* Data types
+* Join requirements
+* Query restrictions
+* BigQuery-specific syntax guidance
+* Alias restrictions
 
 ---
 
-# 🔧 Self-Healing SQL Agent
+## SQL Validation
 
-The SQL agent includes an automated repair mechanism.
+Generated SQL is executed against BigQuery.
 
-If the generated SQL contains a syntax error, the system can:
-
-1. Capture the BigQuery error.
-2. Provide the error message to Gemini.
-3. Provide the original SQL.
-4. Request a corrected query.
-5. Validate the corrected SQL.
-6. Execute the query if validation succeeds.
-
-Example:
+If execution succeeds:
 
 ```text
-User:
-What are the top five treatments by revenue?
-
-        ↓
-
-Gemini
-
-        ↓
-
-Generated GoogleSQL
-
-        ↓
-
-BigQuery Validation
-
-        ↓
-
-Syntax Error
-
-        ↓
-
-Gemini SQL Repair
-
-        ↓
-
-Corrected GoogleSQL
-
-        ↓
-
-BigQuery Execution
-
-        ↓
-
-Results
+Generated SQL
+     │
+     ▼
+BigQuery
+     │
+     ▼
+Successful Results
 ```
 
-This reduces failures caused by:
+If execution fails:
 
-* Incorrect column names
-* Invalid SQL syntax
-* Incorrect table references
-* BigQuery-specific SQL differences
-* Reserved keyword collisions
+```text
+Generated SQL
+     │
+     ▼
+BigQuery
+     │
+     ▼
+SQL Error
+     │
+     ▼
+Gemini Repair
+     │
+     ▼
+Corrected SQL
+     │
+     ▼
+BigQuery
+```
+
+The repair loop helps the system recover from common SQL-generation errors.
 
 ---
 
-# 🔐 SQL Safety
+# ⚠️ Keyword Conflict Safeguards
 
-The application should only execute read-oriented analytical queries.
+BigQuery reserves certain keywords that should not be used casually as table aliases.
 
-The SQL validation layer should reject destructive operations such as:
+For example, `AT` has special meaning in BigQuery time-travel syntax.
 
-```text
-INSERT
-UPDATE
-DELETE
-DROP
-ALTER
-TRUNCATE
-CREATE
-MERGE
-GRANT
-REVOKE
-```
+Therefore, the SQL-generation prompts include explicit aliasing constraints.
 
-The intended query pattern is:
+Instead of:
 
 ```sql
-SELECT ...
-FROM ...
-WHERE ...
-GROUP BY ...
-ORDER BY ...
-LIMIT ...
+JOIN appointment_treatments AS at
 ```
 
-This provides an additional protection layer between Gemini-generated SQL and the BigQuery warehouse.
+the system can instruct Gemini to use:
+
+```sql
+JOIN appointment_treatments AS apt_treat
+```
+
+This reduces the probability of SQL parsing errors caused by reserved keywords.
 
 ---
 
 # 🗄️ BigQuery Database Schema
 
-The warehouse contains 11 core relational tables.
+The warehouse contains **11 core relational tables**.
 
-## 1. `patients`
-
-Stores synthetic patient demographic information.
-
-Typical fields include:
-
-```text
-patient_id
-first_name
-last_name
-date_of_birth
-gender
-phone
-email
-address
-registration_date
-```
+| #  | Table                    | Description                                                  |
+| -- | ------------------------ | ------------------------------------------------------------ |
+| 1  | `patients`               | Synthetic patient demographic and registration details       |
+| 2  | `dentists`               | Provider names, specializations, and license identifiers     |
+| 3  | `staff`                  | Clinic receptionists, assistants, and practice managers      |
+| 4  | `treatments`             | ADA procedure codes, treatment categories, and standard fees |
+| 5  | `appointments`           | Patient scheduling, visit status, and appointment types      |
+| 6  | `appointment_treatments` | Association table mapping procedures to appointments         |
+| 7  | `medical_history`        | Systemic patient conditions and recorded dates               |
+| 8  | `dental_records`         | Tooth-level observations and free-text clinical notes        |
+| 9  | `prescriptions`          | Medications, dosage, frequency, and instructions             |
+| 10 | `invoices`               | Billing subtotal, tax, discounts, and invoice status         |
+| 11 | `payments`               | Payment dates, payment methods, and transaction totals       |
 
 ---
 
-## 2. `dentists`
+# 🔗 Relational Model
 
-Stores dentist information.
-
-Typical fields include:
+The core relationships can be represented conceptually as:
 
 ```text
-dentist_id
-first_name
-last_name
-specialization
-license_number
-phone
-email
-```
+patients
+   │
+   ├───────────────┐
+   │               │
+   ▼               ▼
+appointments   medical_history
+   │
+   ├───────────────┐
+   │               │
+   ▼               ▼
+dental_records  prescriptions
+   │
+   │
+   ▼
+appointment_treatments
+   │
+   ▼
+treatments
 
----
 
-## 3. `staff`
-
-Stores non-dentist clinic staff.
-
-Typical roles include:
-
-```text
-Receptionist
-Dental Assistant
-Practice Manager
-Dental Hygienist
-Administrator
-```
-
----
-
-## 4. `treatments`
-
-Stores the dental treatment catalog.
-
-Typical fields include:
-
-```text
-treatment_id
-ada_code
-treatment_name
-description
-standard_fee
-category
-```
-
-Examples include:
-
-```text
-Dental Cleaning
-Dental Examination
-Dental Filling
-Root Canal
-Tooth Extraction
-Dental Crown
-Dental Bridge
-Dental Implant
-Teeth Whitening
-```
-
----
-
-## 5. `appointments`
-
-Stores patient appointments.
-
-Typical fields include:
-
-```text
-appointment_id
-patient_id
-dentist_id
-appointment_date
-appointment_time
-status
-appointment_type
-reason
-```
-
-Possible appointment statuses:
-
-```text
-Scheduled
-Confirmed
-Completed
-Cancelled
-No Show
-Pending
-```
-
----
-
-## 6. `appointment_treatments`
-
-Provides the relationship between appointments and treatments.
-
-Typical fields:
-
-```text
-appointment_treatment_id
-appointment_id
-treatment_id
-quantity
-unit_price
-total_price
-```
-
-This table allows a single appointment to contain multiple treatments.
-
----
-
-## 7. `medical_history`
-
-Stores synthetic patient medical history.
-
-Typical fields include:
-
-```text
-medical_history_id
-patient_id
-condition
-description
-recorded_date
-status
-```
-
----
-
-## 8. `dental_records`
-
-Stores clinical dental observations.
-
-Typical fields include:
-
-```text
-dental_record_id
-patient_id
-dentist_id
-appointment_id
-tooth_number
-condition
-clinical_notes
-recorded_date
-```
-
-The `clinical_notes` field is particularly important for semantic/vector retrieval.
-
----
-
-## 9. `prescriptions`
-
-Stores medication prescriptions.
-
-Typical fields include:
-
-```text
-prescription_id
-patient_id
-dentist_id
-appointment_id
-medication
-dosage
-frequency
-duration
-instructions
-prescribed_date
-```
-
----
-
-## 10. `invoices`
-
-Stores patient invoices.
-
-Typical fields include:
-
-```text
-invoice_id
-patient_id
-appointment_id
-invoice_date
-subtotal
-tax
-discount
-total_amount
-status
-```
-
----
-
-## 11. `payments`
-
-Stores invoice payments.
-
-Typical fields include:
-
-```text
-payment_id
-invoice_id
-payment_date
-amount
-payment_method
-status
-```
-
----
-
-# 📊 Data Warehouse Optimization
-
-BigQuery storage and query performance are considered when designing the schema.
-
-## Partitioning
-
-Large time-series tables can be partitioned using appropriate date fields.
-
-Examples:
-
-```text
 appointments
-    └── appointment_date
-
-medical_history
-    └── recorded_date
-
-dental_records
-    └── recorded_date
-
+   │
+   ▼
 invoices
-    └── invoice_date
-
+   │
+   ▼
 payments
-    └── payment_date
+
+
+dentists
+   │
+   ▼
+appointments
+
+
+staff
+   │
+   ▼
+appointments
 ```
 
-Partitioning allows queries to scan only relevant date ranges where applicable.
+This relational structure enables analytical queries across clinical, operational, and financial domains.
 
 ---
 
-## Clustering
+# 📊 Synthetic Dataset
 
-Frequently filtered or joined columns can be used as clustering keys.
+The project uses synthetic data to simulate a realistic dental practice environment.
 
-Potential clustering fields include:
+The generated data covers:
 
-```text
-patient_id
-dentist_id
-treatment_id
-appointment_id
-status
-```
+| Domain        | Example Data                                          |
+| ------------- | ----------------------------------------------------- |
+| Patients      | Demographics, registration dates, contact information |
+| Dentists      | Names, specialties, license information               |
+| Appointments  | Dates, times, status, appointment type                |
+| Treatments    | Procedure codes, categories, fees                     |
+| Clinical      | Tooth observations, clinical notes                    |
+| Medical       | Conditions and medical history                        |
+| Prescriptions | Medication, dosage, frequency                         |
+| Billing       | Invoices, discounts, tax, totals                      |
+| Payments      | Payment method, date, amount                          |
 
-The exact clustering strategy should be aligned with the application's actual query patterns.
+The complete generated dataset contains **1.8M+ synthetic records**.
 
----
-
-# 🧬 Synthetic Data Generation
-
-The project generates synthetic dental clinic data using Python.
-
-The main generation process is located at:
-
-```text
-data_generation/generate_and_load.py
-```
-
-Static catalogs are maintained in:
-
-```text
-data_generation/catalog.py
-```
-
-The catalog can contain:
-
-* Dental procedures
-* ADA-style procedure codes
-* Dental conditions
-* Clinical note templates
-* Medications
-* Appointment types
-* Patient statuses
-* Payment methods
-* Treatment categories
-
-All generated patient and clinical information is synthetic.
+> No real patient information is required for the project.
 
 ---
 
@@ -668,131 +574,69 @@ dental-rag-gcp/
 │
 ├── config/
 │   ├── __init__.py
-│   └── settings.py
+│   └── settings.py              # Configuration & credentials
 │
 ├── data_generation/
 │   ├── __init__.py
-│   ├── catalog.py
-│   └── generate_and_load.py
+│   ├── catalog.py               # Dental procedural catalogs and note templates
+│   └── generate_and_load.py     # Synthetic data generator and BigQuery loader
 │
 ├── rag/
 │   ├── __init__.py
-│   ├── bq_client.py
-│   ├── pipeline.py
-│   ├── prompts.py
-│   └── sql_agent.py
+│   ├── bq_client.py             # BigQuery execution client and schema introspection
+│   ├── prompts.py               # Guardrail, routing, SQL and repair prompts
+│   ├── sql_agent.py             # Text-to-SQL agent and SQL repair loop
+│   ├── vector_search.py         # Clinical semantic/vector retrieval
+│   ├── router.py                # SQL / Vector / Hybrid routing
+│   └── pipeline.py              # End-to-end RAG orchestration and tracing
 │
 ├── sql/
-│   ├── schema.sql
-│   └── truncate.sql
+│   ├── schema.sql               # BigQuery DDL definitions
+│   ├── truncate.sql             # Table reset scripts
+│   └── embeddings.sql           # Embedding/vector-search SQL
 │
-├── app.py
-├── service_account.json
-├── .env
-├── .env.example
-├── .gitignore
-├── README.md
-└── requirements.txt
+├── app.py                       # Interactive CLI entrypoint
+├── service_account.json         # GCP service-account key (Git-ignored)
+├── .env                         # Local runtime environment variables
+├── .env.example                 # Environment configuration template
+├── .gitignore                   # Git ignore rules
+├── README.md                    # Project documentation
+└── requirements.txt             # Python dependencies
 ```
 
 ---
 
-# ⚙️ Prerequisites
+# ⚙️ Prerequisites & Setup
 
-Before running the project, install the following:
+## 1. Required Software
 
-### Python
+Before running the project, install:
 
-Recommended:
-
-```text
-Python 3.10+
-```
-
-### Google Cloud
-
-A Google Cloud project with:
-
-* BigQuery enabled
-* Appropriate IAM permissions
-* A BigQuery dataset
-* Service account credentials
-
-### Gemini
-
-A Gemini API configuration compatible with the application.
+* Python 3.10+
+* Google Cloud project
+* BigQuery
+* Gemini API access
+* LangSmith account/API key
+* Git
+* VS Code or another Python-compatible IDE
 
 ---
 
-# ☁️ GCP Configuration
+# 🐍 2. Create the Python Environment
 
-Example configuration:
-
-```env
-GCP_PROJECT_ID=dental-clinic-rag
-BIGQUERY_DATASET=dental_service
-GCP_REGION=australia-southeast2
-GOOGLE_APPLICATION_CREDENTIALS=service_account.json
-
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite
-```
-
-Replace placeholder values with the actual configuration for your environment.
-
-> Model availability and naming can change. Use a model identifier that is currently available to your Gemini/Vertex AI configuration.
-
----
-
-# 🔑 Service Account Setup
-
-Create a GCP service account for the application.
-
-The service account requires appropriate permissions to:
-
-* Submit BigQuery jobs
-* Read BigQuery data
-* Create or manage the required dataset/tables when provisioning the environment
-
-For a minimally scoped runtime account, prefer granting only the permissions actually required by the application.
-
-The credentials file should be stored locally as:
-
-```text
-service_account.json
-```
-
-### ⚠️ Security
-
-Never commit the service-account key to Git.
-
-The `.gitignore` file should contain:
-
-```text
-service_account.json
-.env
-.venv/
-__pycache__/
-*.pyc
-```
-
----
-
-# 🐍 Python Environment Setup
-
-From the project root:
+Open PowerShell from the project directory.
 
 ```powershell
 python -m venv .venv
 ```
 
-Activate the environment on Windows PowerShell:
+Activate the environment:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Upgrade pip:
+Upgrade `pip`:
 
 ```powershell
 python -m pip install --upgrade pip
@@ -804,197 +648,347 @@ Install project dependencies:
 python -m pip install -r requirements.txt
 ```
 
+If PowerShell blocks virtual-environment activation, run:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Then activate the environment again:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
 ---
 
-# 🔧 Environment Configuration
+# ☁️ 3. Google Cloud Platform Configuration
 
-Create a `.env` file in the project root.
+Create or use a Google Cloud project for the application.
 
 Example:
 
-```env
-GCP_PROJECT_ID=dental-clinic-rag
-BIGQUERY_DATASET=dental_service
-GCP_REGION=australia-southeast2
-
-GOOGLE_APPLICATION_CREDENTIALS=service_account.json
-
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite
-```
-
-A template should also be maintained in:
-
 ```text
-.env.example
+Project ID:
+dental-clinic-rag
 ```
 
-Never place real API keys or service-account secrets inside `.env.example`.
+Enable the required services, including BigQuery and the APIs required by the selected Gemini integration.
+
+The exact APIs required may vary depending on whether Gemini is accessed through the Gemini API, Vertex AI, or another supported integration.
 
 ---
 
-# 🗃️ BigQuery Dataset
+# 🔐 4. Service Account Configuration
 
-The project expects the BigQuery dataset:
+Create a GCP service account for the application.
+
+The service account should have only the permissions required by the project.
+
+For a development environment, the account generally requires permissions to:
+
+* Access BigQuery datasets
+* Create/query BigQuery tables where required
+* Load data into BigQuery
+* Run BigQuery jobs
+
+Download the service-account JSON key and place it in the project root:
 
 ```text
-dental_service
+dental-rag-gcp/
+│
+└── service_account.json
 ```
 
-The fully qualified table naming convention is:
+> **Security:** Never commit `service_account.json` to Git.
 
-```text
-PROJECT_ID.dental_service.TABLE_NAME
+The `.gitignore` should contain:
+
+```gitignore
+service_account.json
+.env
+.venv/
+__pycache__/
+*.pyc
 ```
+
+---
+
+# 🔑 5. Environment Configuration
+
+Create a `.env` file in the project root.
+
+```env
+# GCP & BigQuery Settings
+GCP_PROJECT_ID=project_name
+BIGQUERY_DATASET=database_name
+GCP_REGION=australia-southeast2
+GOOGLE_APPLICATION_CREDENTIALS=service_account.json
+
+# Gemini AI Settings
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+# LangSmith Observability
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+LANGSMITH_PROJECT=project_name
+```
+
+> **Important:** Do not commit `.env` or API keys to a public repository.
+
+---
+
+# 🧪 6. Environment Template
+
+A `.env.example` file can be committed to the repository as a template.
+
+```env
+GCP_PROJECT_ID=your_gcp_project_id
+BIGQUERY_DATASET=databse_name
+GCP_REGION=australia-southeast2
+GOOGLE_APPLICATION_CREDENTIALS=service_account.json
+
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=your_gemini_model
+
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=project_name
+```
+
+---
+
+# 📦 7. Install Dependencies
+
+Install all dependencies from `requirements.txt`:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+To verify the LangSmith installation:
+
+```powershell
+python -m pip show langsmith
+```
+
+To verify the installed packages:
+
+```powershell
+python -m pip list
+```
+
+---
+
+# 🗃️ 8. BigQuery Dataset
+
+Create the BigQuery dataset configured in `.env`.
 
 For example:
 
 ```text
-dental-clinic-rag.dental_service.patients
+Project:
+dental-rag
+
+Dataset:
+dental_service
+
+Region:
+australia-southeast2
+```
+
+The project can then create/load the required tables into:
+
+```text
+dental-rag.dental_service
 ```
 
 ---
 
-# 🚀 Initial Setup
+# 🏭 9. Seed the Warehouse
 
-After configuring GCP credentials and environment variables, generate and load the synthetic dataset:
+After configuring GCP credentials and environment variables, run the synthetic data-generation pipeline:
 
 ```powershell
 python -m data_generation.generate_and_load
 ```
 
-The data generation process is responsible for:
+The pipeline is responsible for generating and loading the synthetic dental-clinic records into BigQuery.
 
-1. Loading the dental catalogs.
-2. Generating synthetic records.
-3. Creating the required BigQuery tables.
-4. Loading records into BigQuery.
-5. Applying the required schema definitions.
-6. Preparing the warehouse for RAG queries.
+Depending on the implementation, this process may:
+
+1. Generate synthetic patient data
+2. Generate dentist and staff records
+3. Generate treatment catalog data
+4. Generate appointments
+5. Generate treatment associations
+6. Generate medical history
+7. Generate dental records
+8. Generate prescriptions
+9. Generate invoices
+10. Generate payments
+11. Load the resulting data into BigQuery
 
 ---
 
-# 🏃 Running the Application
+# 🔄 10. Resetting the Warehouse
 
-Once the BigQuery data has been provisioned, start the assistant:
+If the project includes table-reset SQL scripts, the tables can be cleared using:
+
+```text
+sql/truncate.sql
+```
+
+Use this carefully because truncation removes the existing table data.
+
+---
+
+# 🧮 11. Embeddings and Clinical Semantic Search
+
+The project can use embeddings to support semantic retrieval over clinical text such as:
+
+```text
+dental_records.clinical_notes
+```
+
+The general flow is:
+
+```text
+Clinical Notes
+      │
+      ▼
+Embedding Generation
+      │
+      ▼
+Vector Representation
+      │
+      ▼
+BigQuery Vector Storage
+      │
+      ▼
+Semantic Similarity Search
+```
+
+The SQL used to support embedding/vector operations is maintained in:
+
+```text
+sql/embeddings.sql
+```
+
+---
+
+# 🚀 Running the System
+
+## 1. Seed the Warehouse
+
+```powershell
+python -m data_generation.generate_and_load
+```
+
+## 2. Start the Interactive Assistant
 
 ```powershell
 python app.py
 ```
 
-The application provides an interactive conversational interface.
-
-Example:
-
-```text
-==================================================
- Dental Clinic RAG Assistant
-==================================================
-
-Ask a question or type 'exit' to quit.
-
-You:
-```
+The application provides an interactive interface for submitting natural-language questions against the dental data warehouse and RAG system.
 
 ---
 
 # 💬 Example Queries
 
-## Analytical Queries
+## Analytical Query
 
 ```text
-What are the five most common dental treatments?
+What are the top 5 most common dental treatments performed,
+and what is the total revenue generated from each?
 ```
 
-```text
-What is the total revenue generated from dental treatments?
-```
+Expected routing:
 
 ```text
-What is the average treatment cost?
-```
-
-```text
-How many appointments were completed last month?
-```
-
----
-
-## Operational Queries
-
-```text
-How many pending appointments are scheduled this month?
-```
-
-```text
-How many appointments does each dentist have?
-```
-
-```text
-Which dentists performed the most treatments?
-```
-
-```text
-How many cancelled appointments were recorded this year?
+User Question
+      │
+      ▼
+Guardrail
+      │
+      ▼
+Intent Router
+      │
+      ▼
+SQL
+      │
+      ▼
+Gemini Text-to-SQL
+      │
+      ▼
+BigQuery
 ```
 
 ---
 
-## Financial Queries
+## Multi-Table Join
 
 ```text
-What is the total amount of unpaid invoices?
+What is the total revenue generated by each dentist, and how many unique appointments did they complete?
 ```
 
-```text
-What was the total revenue last month?
-```
+This type of query requires information from multiple relational tables.
+
+---
+
+## Financial Query
 
 ```text
-What are the most common payment methods?
+Which patients currently have overdue or unpaid invoices greater than $300, and what are their phone numbers?
 ```
 
+This requires joining patient and invoice information and applying financial filters.
+
+---
+
+## Clinical Semantic Query
+
 ```text
-What is the average invoice value?
+Find patients whose clinical notes mention sensitivity after a filling.
+```
+
+This can be routed to semantic clinical retrieval.
+
+---
+
+## Hybrid Query
+
+```text
+Find patients with sensitivity after fillings and show the number of follow-up appointments they attended.
+```
+
+This can require:
+
+```text
+Clinical Vector Search
+        +
+BigQuery SQL
+        │
+        ▼
+Combined Context
+        │
+        ▼
+Gemini Response
 ```
 
 ---
 
-## Clinical Semantic Queries
+## Blocked Guardrail Query
 
 ```text
-Find clinical notes mentioning tooth sensitivity.
+How many moons does Jupiter have,and which one is the largest?
 ```
 
-```text
-Find patients with notes mentioning post-treatment discomfort.
-```
-
-```text
-Find dental records describing symptoms associated with gum inflammation.
-```
-
-These questions can be routed toward semantic retrieval when they depend primarily on free-text clinical information.
-
----
-
-# 🚫 Example Blocked Query
-
-An unrelated query such as:
-
-```text
-How many moons does Jupiter have?
-```
-
-should be identified by the domain guardrail and rejected.
-
-The system should not send an unrelated question to the BigQuery SQL execution layer.
-
----
-
-# 🔄 End-to-End Query Flow
-
-The complete application workflow is:
+Expected behaviour:
 
 ```text
 User Question
@@ -1003,410 +997,182 @@ User Question
 Domain Guardrail
       │
       ▼
-Intent Classification
-      │
-      ├───────────────┐
-      │               │
-      ▼               ▼
-     SQL            Vector
-      │               │
-      ▼               ▼
-Text-to-SQL      Semantic Search
-      │               │
-      ▼               │
-SQL Validation         │
-      │               │
-      ▼               │
-BigQuery Query         │
-      │               │
-      └───────┬───────┘
-              │
-              ▼
-       Retrieved Context
-              │
-              ▼
-       Response Synthesis
-              │
-              ▼
-         Final Answer
+Rejected
 ```
 
----
-
-# 🧩 Project Components
-
-## `config/settings.py`
-
-Responsible for loading environment configuration.
-
-Typical responsibilities include:
-
-* GCP project configuration
-* BigQuery dataset configuration
-* Gemini configuration
-* Authentication settings
-* Runtime settings
+The application should reject unrelated questions without executing unnecessary database queries.
 
 ---
 
-## `data_generation/catalog.py`
+# 🔍 RAG Execution Flow
 
-Contains static domain-specific catalogs.
-
-Examples:
+A complete request can be represented as:
 
 ```text
-Treatments
-Medications
-Dental Conditions
-Clinical Note Templates
-Appointment Types
-Payment Methods
+┌─────────────────────────┐
+│      User Question      │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│    Domain Guardrail     │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│   Intent Classification │
+└────────────┬────────────┘
+             │
+       ┌─────┼─────┐
+       │     │     │
+       ▼     ▼     ▼
+      SQL  Vector Hybrid
+       │     │     │
+       │     │     ├──────────────┐
+       │     │     │              │
+       ▼     ▼     ▼              ▼
+   BigQuery Vector Search     BigQuery SQL
+       │     │     │              │
+       └─────┴─────┴──────────────┘
+                    │
+                    ▼
+          ┌───────────────────┐
+          │ Context Assembly  │
+          └─────────┬─────────┘
+                    │
+                    ▼
+          ┌───────────────────┐
+          │ Gemini Synthesis  │
+          └─────────┬─────────┘
+                    │
+                    ▼
+          ┌───────────────────┐
+          │   Final Answer    │
+          └───────────────────┘
 ```
 
 ---
 
-## `data_generation/generate_and_load.py`
+# 📈 Observability Flow
 
-Responsible for:
-
-* Synthetic record generation
-* Data transformation
-* BigQuery table creation
-* Batch loading
-* Dataset initialization
-
----
-
-## `rag/bq_client.py`
-
-Provides the BigQuery interface.
-
-Responsibilities include:
-
-* BigQuery client initialization
-* SQL execution
-* Schema discovery
-* Metadata extraction
-* Query validation
-* Result conversion
-
----
-
-## `rag/prompts.py`
-
-Contains prompts used by the RAG pipeline.
-
-Prompt categories include:
+LangSmith traces the major stages of the application.
 
 ```text
-Domain Guardrail
-Intent Classification
-SQL Generation
-SQL Repair
-Response Synthesis
+                    dental_rag_pipeline
+                            │
+             ┌──────────────┼──────────────┐
+             │              │              │
+             ▼              ▼              ▼
+       guardrail_check  intent_router  retrieval
+                                           │
+                                  ┌────────┴────────┐
+                                  │                 │
+                                  ▼                 ▼
+                              SQL Route       Vector Route
+                                  │                 │
+                                  ▼                 │
+                           SQL Generation          │
+                                  │                 │
+                                  ▼                 ▼
+                           BigQuery Query    Vector Search
+                                  │                 │
+                                  └────────┬────────┘
+                                           │
+                                           ▼
+                                  response_synthesis
 ```
 
-Keeping prompts in a dedicated module makes the RAG system easier to maintain and evaluate.
+This provides a single place to investigate the lifecycle of an individual request.
 
 ---
 
-## `rag/sql_agent.py`
+# 🧾 SQL Self-Healing Example
 
-Responsible for Text-to-SQL processing.
-
-Main responsibilities:
-
-```text
-Question
-   ↓
-Schema Context
-   ↓
-Gemini
-   ↓
-GoogleSQL
-   ↓
-Validation
-   ↓
-Repair if necessary
-   ↓
-Execution
-```
-
----
-
-## `rag/pipeline.py`
-
-Acts as the main RAG orchestrator.
-
-It coordinates:
-
-* Guardrails
-* Intent routing
-* SQL retrieval
-* Semantic retrieval
-* Hybrid retrieval
-* Context construction
-* Response generation
-
----
-
-# 🧪 SQL Validation
-
-Generated SQL should be validated before execution.
-
-Recommended validation stages:
-
-```text
-1. Remove Markdown SQL fences
-2. Normalize whitespace
-3. Check query type
-4. Reject destructive statements
-5. Validate referenced tables
-6. Perform BigQuery dry-run where appropriate
-7. Execute only validated SQL
-```
-
-Example generated query:
+Suppose Gemini generates:
 
 ```sql
 SELECT
-    treatment_name,
-    COUNT(*) AS treatment_count
-FROM `dental-clinic-rag.dental_service.appointment_treatments`
-GROUP BY treatment_name
-ORDER BY treatment_count DESC
-LIMIT 5;
+    d.name,
+    COUNT(DISTINCT a.appointment_id)
+FROM appointments a
+JOIN appointment_treatments at
+    ON a.appointment_id = at.appointment_id
+JOIN dentists d
+    ON a.dentist_id = d.dentist_id
+GROUP BY d.name;
 ```
 
----
-
-# 📈 BigQuery Cost Considerations
-
-BigQuery charges based on data processed for applicable query operations.
-
-The project therefore uses several techniques to reduce unnecessary scanning:
-
-* Partitioned tables
-* Clustered tables
-* Targeted SQL generation
-* Limited result sets
-* Domain filtering
-* Query validation
-* Avoiding unnecessary `SELECT *`
-* Date-range filtering where appropriate
-
-For example, instead of:
-
-```sql
-SELECT *
-FROM `project.dataset.appointments`;
-```
-
-the SQL agent should generate targeted queries such as:
+If BigQuery reports an SQL parsing error because of the alias `at`, the repair process can identify the problem and regenerate the query using a safer alias:
 
 ```sql
 SELECT
-    dentist_id,
-    COUNT(*) AS appointment_count
-FROM `project.dataset.appointments`
-WHERE appointment_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
-GROUP BY dentist_id;
+    d.name,
+    COUNT(DISTINCT a.appointment_id)
+FROM appointments a
+JOIN appointment_treatments apt_treat
+    ON a.appointment_id = apt_treat.appointment_id
+JOIN dentists d
+    ON a.dentist_id = d.dentist_id
+GROUP BY d.name;
 ```
+
+The corrected query can then be re-executed.
 
 ---
 
-# 🔒 Data & Privacy
+# 💰 BigQuery Cost Considerations
 
-This project is designed around synthetic data.
+BigQuery charges can depend on the amount of data processed and the services/features being used.
 
-It should not be populated with real patient information unless the system has been appropriately secured, governed, and reviewed for the applicable privacy and healthcare requirements.
+To reduce unnecessary processing:
 
-The repository should never contain:
+* Use partitioned tables where appropriate.
+* Use clustering for frequently filtered columns.
+* Avoid `SELECT *` when only a subset of columns is required.
+* Apply filters as early as possible.
+* Prevent unrelated queries from reaching BigQuery through domain guardrails.
+* Validate generated SQL before execution where possible.
+* Monitor query execution through BigQuery.
+* Monitor model usage through LangSmith.
+* Avoid unnecessary retry loops.
 
-```text
-Real patient names
-Real addresses
-Real medical records
-Real prescriptions
-Real patient identifiers
-Production credentials
-API keys
-Service-account keys
-```
-
----
-
-# 🧹 Resetting the Dataset
-
-The SQL reset script is located at:
-
-```text
-sql/truncate.sql
-```
-
-It can be used to clear generated records when rebuilding the development dataset.
-
-Before executing reset operations, verify that the target project and dataset are correct.
+For large datasets, query design can have a significant impact on execution efficiency.
 
 ---
 
-# 🧪 Development Workflow
+# 🔐 Security & Data Privacy
 
-A typical development cycle is:
+This project is designed around synthetic healthcare data.
 
-```text
-1. Modify schema
-       ↓
-2. Update synthetic data generator
-       ↓
-3. Load test data
-       ↓
-4. Test BigQuery queries
-       ↓
-5. Update prompts
-       ↓
-6. Test SQL generation
-       ↓
-7. Test guardrails
-       ↓
-8. Test RAG routing
-       ↓
-9. Test response synthesis
-       ↓
-10. Run end-to-end application
-```
+### Security recommendations
 
----
-
-# 🛠️ Troubleshooting
-
-## Authentication Error
-
-If BigQuery authentication fails, verify:
+Never commit:
 
 ```text
-GOOGLE_APPLICATION_CREDENTIALS
-```
-
-and confirm that the service-account file exists:
-
-```text
+.env
 service_account.json
 ```
 
----
+to source control.
 
-## Dataset Not Found
-
-Verify:
-
-```env
-GCP_PROJECT_ID=dental-clinic-rag
-BIGQUERY_DATASET=dental_service
-```
-
-Also verify that the dataset exists in the selected GCP project.
-
----
-
-## Gemini API Error
-
-Check:
-
-```env
-GEMINI_API_KEY
-GEMINI_MODEL
-```
-
-Also verify that the configured model is available to the API/service being used.
-
----
-
-## SQL Generation Error
-
-Check:
-
-```text
-rag/prompts.py
-rag/sql_agent.py
-rag/bq_client.py
-```
-
-The generated SQL should be checked for:
-
-* Correct project ID
-* Correct dataset
-* Correct table names
-* Correct column names
-* BigQuery SQL syntax
-* Appropriate date handling
-* Appropriate aggregation
-
----
-
-## PowerShell Virtual Environment Error
-
-If PowerShell blocks activation, run:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-Then:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
----
-
-# 📋 Example Complete Session
-
-```powershell
-# Activate environment
-.\.venv\Scripts\Activate.ps1
-
-# Install dependencies
-python -m pip install -r requirements.txt
-
-# Generate and load synthetic data
-python -m data_generation.generate_and_load
-
-# Start the assistant
-python app.py
-```
-
-Then:
-
-```text
-You: What are the most common treatments?
-
-Assistant:
-The most frequently recorded treatments are ...
-```
-
----
-
-# 🔐 Recommended `.gitignore`
+Recommended `.gitignore`:
 
 ```gitignore
 # Python
-__pycache__/
-*.py[cod]
-
-# Virtual environment
 .venv/
-venv/
+__pycache__/
+*.pyc
 
 # Environment variables
 .env
 
 # GCP credentials
 service_account.json
+*.json
 
 # IDE
 .vscode/
+.idea/
 
 # Logs
 *.log
@@ -1416,122 +1182,464 @@ service_account.json
 Thumbs.db
 ```
 
+For production deployments, consider:
+
+* Secret Manager
+* Workload Identity
+* Short-lived credentials
+* IAM least privilege
+* Separate development and production projects
+* Dataset-level access controls
+* Audit logging
+* Key rotation
+
+---
+
+# 🧪 Testing Strategy
+
+The RAG system can be tested across multiple query categories.
+
+## Domain Guardrail Tests
+
+```text
+How many moons does Jupiter have?
+```
+
+Expected:
+
+```text
+Blocked
+```
+
+## SQL Tests
+
+```text
+How many appointments were completed last month?
+```
+
+Expected:
+
+```text
+SQL Route
+```
+
+## Financial Tests
+
+```text
+What is the total outstanding invoice balance?
+```
+
+Expected:
+
+```text
+SQL Route
+```
+
+## Clinical Tests
+
+```text
+Find clinical notes mentioning tooth sensitivity.
+```
+
+Expected:
+
+```text
+Vector Route
+```
+
+## Hybrid Tests
+
+```text
+Find patients with sensitivity after fillings
+and count their follow-up appointments.
+```
+
+Expected:
+
+```text
+Hybrid Route
+```
+
+## SQL Repair Tests
+
+Provide questions likely to produce complex joins and verify that:
+
+1. SQL is generated.
+2. BigQuery execution is attempted.
+3. Errors are captured.
+4. SQL repair is triggered where appropriate.
+5. Corrected SQL is executed.
+6. The final response is generated.
+
+---
+
+# 📊 Evaluation Areas
+
+The project can be evaluated using the following dimensions.
+
+| Area             | Evaluation                                  |
+| ---------------- | ------------------------------------------- |
+| Data Generation  | Volume, realism, referential integrity      |
+| SQL Generation   | Syntax and semantic correctness             |
+| SQL Execution    | BigQuery execution success                  |
+| SQL Repair       | Recovery from generated SQL errors          |
+| Routing          | Correct SQL/Vector/Hybrid classification    |
+| Retrieval        | Relevance of retrieved clinical records     |
+| Guardrails       | Correct handling of out-of-domain questions |
+| Response Quality | Accuracy and contextual relevance           |
+| Latency          | End-to-end response time                    |
+| Observability    | Trace completeness and debugging visibility |
+| Cost             | Model and BigQuery resource usage           |
+
+---
+
+# 🛠️ Troubleshooting
+
+## BigQuery Authentication Error
+
+Verify:
+
+```env
+GOOGLE_APPLICATION_CREDENTIALS=service_account.json
+```
+
+Also verify that the file exists:
+
+```powershell
+Test-Path .\service_account.json
+```
+
+Expected:
+
+```text
+True
+```
+
+---
+
+## Environment Variables Not Loaded
+
+Verify that `.env` exists:
+
+```powershell
+Test-Path .\.env
+```
+
+Check the required variables:
+
+```env
+GCP_PROJECT_ID=
+BIGQUERY_DATASET=
+GCP_REGION=
+GEMINI_API_KEY=
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=
+```
+
+---
+
+## LangSmith Traces Not Appearing
+
+Verify:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=dental-clinic-rag
+```
+
+Also confirm that the application initializes LangSmith tracing before the RAG pipeline executes.
+
+---
+
+## BigQuery SQL Error
+
+Inspect:
+
+1. Generated SQL
+2. BigQuery error message
+3. Schema context
+4. Join conditions
+5. Column names
+6. Alias names
+7. SQL repair trace
+
+LangSmith traces can be used to inspect the generated SQL and repair attempts.
+
+---
+
+## Gemini API Error
+
+Check:
+
+* API key
+* Model name
+* API availability
+* Request limits
+* Network connectivity
+* Model configuration
+
+If retry logic is implemented, the application should use controlled retry behaviour rather than continuously retrying failed requests.
+
+---
+
+# 📋 Example `.gitignore`
+
+```gitignore
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+
+# Credentials
+service_account.json
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+```
+
 ---
 
 # 📦 Requirements
 
-The project's Python dependencies are maintained in:
+The project dependencies are maintained in:
 
 ```text
 requirements.txt
 ```
 
-Typical dependency categories include:
-
-```text
-Google Cloud BigQuery
-Google authentication
-Gemini / Google AI SDK
-Pydantic
-python-dotenv
-Pandas
-NumPy
-```
-
-The exact package versions should be pinned in `requirements.txt` when reproducible deployments are required.
-
----
-
-# 🗺️ Future Enhancements
-
-Potential extensions include:
-
-* Streamlit web interface
-* BigQuery Vector Search integration
-* Clinical note embeddings
-* Hybrid SQL + vector retrieval
-* Automated RAG evaluation
-* Query latency monitoring
-* BigQuery cost monitoring
-* Conversation history
-* Role-based access control
-* Structured audit logging
-* Automated test suite
-* CI/CD deployment
-* Cloud Run deployment
-* Vertex AI integration
-* Production-grade secret management
-
----
-
-# 📌 Project Summary
-
-The **Dental Clinic BigQuery Data Pipeline & RAG System** combines a synthetic dental practice data warehouse with a natural-language analytics interface.
-
-The major components are:
-
-```text
-Python
-   │
-   ├── Synthetic Data Generation
-   │
-   ├── BigQuery
-   │
-   ├── Gemini
-   │
-   ├── Text-to-SQL
-   │
-   ├── SQL Validation
-   │
-   ├── Semantic Retrieval
-   │
-   └── RAG Pipeline
-```
-
-The resulting system provides a foundation for experimenting with:
-
-* Large-scale structured healthcare data
-* Natural-language database querying
-* Domain-specific LLM applications
-* Text-to-SQL systems
-* Clinical semantic retrieval
-* Hybrid RAG architectures
-* BigQuery analytics
-* Synthetic healthcare datasets
-
----
-
-# 🏁 Quick Start
-
-For a fresh environment:
+Install them using:
 
 ```powershell
-# Clone/open project
-cd dental-rag-gcp
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate
-.\.venv\Scripts\Activate.ps1
-
-# Upgrade pip
-python -m pip install --upgrade pip
-
-# Install dependencies
 python -m pip install -r requirements.txt
+```
 
-# Configure environment
-# Create .env and add GCP/Gemini configuration
+Typical dependencies include libraries for:
 
-# Add GCP service-account key
-# service_account.json
+* Google Cloud BigQuery
+* Gemini/Google AI integration
+* LangChain components where used
+* LangSmith observability
+* Environment-variable management
+* Synthetic data generation
+* Vector/embedding workflows
 
-# Generate and load data
+The exact versions should be maintained in `requirements.txt` to provide reproducible environments.
+
+---
+
+# 🔭 Future Enhancements
+
+Potential future improvements include:
+
+### 1. BigQuery Vector Search
+
+Expand semantic retrieval using native BigQuery vector capabilities.
+
+### 2. Advanced Clinical RAG
+
+Improve clinical-note retrieval using:
+
+* Better embedding models
+* Metadata filtering
+* Hybrid keyword + vector retrieval
+* Re-ranking
+
+### 3. Automated Evaluation
+
+Introduce automated evaluation for:
+
+* SQL correctness
+* Retrieval relevance
+* Answer faithfulness
+* Intent classification
+* Guardrail accuracy
+
+### 4. LangSmith Evaluation
+
+Use LangSmith datasets and evaluation workflows to compare:
+
+* Prompt versions
+* SQL-generation strategies
+* Retrieval strategies
+* Model configurations
+
+### 5. Production API
+
+Expose the RAG pipeline through:
+
+```text
+FastAPI
+    │
+    ▼
+RAG Pipeline
+    │
+    ├── SQL
+    ├── Vector
+    └── Hybrid
+```
+
+### 6. Web Interface
+
+A future frontend could provide:
+
+* Chat interface
+* Query history
+* SQL visibility
+* Retrieved clinical context
+* Trace links
+* Analytics dashboards
+
+### 7. Authentication
+
+Implement application-level authentication and role-based access control for different clinic users.
+
+---
+
+# 📚 Project Objectives
+
+The project demonstrates how modern cloud data and generative-AI technologies can be combined to build an analytical assistant for a structured healthcare domain.
+
+The main objectives are:
+
+1. Build a large-scale synthetic dental dataset.
+2. Store structured data in BigQuery.
+3. Develop a natural-language Text-to-SQL interface.
+4. Implement domain-specific guardrails.
+5. Route questions using SQL, Vector, and Hybrid retrieval strategies.
+6. Implement SQL validation and automated repair.
+7. Support semantic retrieval over clinical notes.
+8. Generate natural-language responses using Gemini.
+9. Monitor model and pipeline execution using LangSmith.
+10. Demonstrate scalable cloud-based RAG architecture.
+
+---
+
+# 🧭 Quick Start
+
+Clone or open the project:
+
+```powershell
+cd dental-rag-gcp
+```
+
+Create the virtual environment:
+
+```powershell
+python -m venv .venv
+```
+
+Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Configure:
+
+```text
+.env
+service_account.json
+```
+
+Seed BigQuery:
+
+```powershell
 python -m data_generation.generate_and_load
+```
 
-# Start the RAG assistant
+Start the assistant:
+
+```powershell
 python app.py
 ```
 
-The system is then ready for natural-language dental clinic analytics against the synthetic BigQuery dataset.
+Then enter a natural-language dental analytics question.
+
+---
+
+# 🔗 LangSmith Dashboard
+
+Traces, latency breakdowns, model usage, SQL-generation steps, errors, and other execution information can be inspected through the configured LangSmith project.
+
+**LangSmith Dashboard:**
+
+https://smith.langchain.com/
+
+The project configured in `.env` is:
+
+```env
+LANGSMITH_PROJECT=dental-clinic-rag
+```
+
+---
+
+# 📌 Important Notes
+
+* The project uses **synthetic healthcare data**.
+* `service_account.json` must never be committed to Git.
+* `.env` must never expose API credentials publicly.
+* BigQuery query costs should be monitored when working with large datasets.
+* SQL generated by an LLM should always be validated before being trusted.
+* Clinical retrieval should be treated as synthetic demonstration data in this project and not as medical advice.
+* Production healthcare deployments require additional security, privacy, compliance, authentication, authorization, auditing, and governance controls.
+
+---
+
+# 📄 License
+
+Add the appropriate license for the project before publishing the repository.
+
+Example:
+
+```text
+MIT License
+```
+
+or use the license required by the organization, university, or project owner.
+
+---
+
+# 👤 Author
+
+**Dental Clinic BigQuery Data Pipeline & RAG System**
+
+Built as a demonstration of:
+
+```text
+Google Cloud
+     +
+BigQuery
+     +
+Gemini
+     +
+RAG
+     +
+Vector Search
+     +
+LangSmith
+     +
+Synthetic Healthcare Data
+```
+
+The project demonstrates an end-to-end architecture for combining structured data analytics, natural-language SQL generation, semantic retrieval, automated SQL repair, and LLM observability in a controlled dental-clinic domain.
